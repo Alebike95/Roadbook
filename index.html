@@ -2,199 +2,628 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Roadbook Logger</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
-body{margin:0;background:#0b0f14;color:#e8eef6;font-family:system-ui}
-.card{background:#121826;border-radius:14px;padding:10px;margin:8px}
-.row{display:flex;gap:8px}
-.big{font-size:34px;font-family:monospace}
-.small{font-size:12px;color:#9fb0c3}
-#map{height:320px;border-radius:14px;position:relative}
-#recenter{
-  position:absolute;bottom:12px;right:12px;
-  background:#1b2536;border-radius:50%;
-  width:44px;height:44px;
-  display:flex;align-items:center;justify-content:center;
-  font-size:20px;cursor:pointer
-}
-table{width:100%;border-collapse:collapse;font-size:13px}
-td,th{border-bottom:1px solid #223;padding:6px}
-button{background:#1b2536;color:#fff;border:none;border-radius:10px;padding:10px}
-.hidden{display:none}
+  :root{
+    --bg:#0b0f14; --card:#121826; --btn:#1b2536; --line:#22304a;
+    --txt:#e8eef6; --muted:#9fb0c3; --good:#4dd4ac; --warn:#ffcc66; --bad:#ff6b6b;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto}
+  .wrap{max-width:980px;margin:0 auto;padding:12px}
+  .card{background:var(--card);border:1px solid rgba(34,48,74,.8);border-radius:16px;padding:12px;margin-bottom:10px}
+  .row{display:grid;gap:10px}
+  @media(min-width:900px){ .row{grid-template-columns: 1.05fr .95fr;} }
+  .mono{font-family:var(--mono)}
+  .muted{color:var(--muted);font-size:12px}
+  .big{font-size:38px;font-family:var(--mono);letter-spacing:.3px}
+  .btn{width:100%;padding:14px 12px;font-size:16px;border-radius:14px;border:1px solid rgba(34,48,74,.9);background:var(--btn);color:var(--txt);font-weight:800}
+  .btn:active{transform:translateY(1px)}
+  .btngrid{display:grid;gap:10px;grid-template-columns:1fr 1fr}
+  .btnwide{grid-column:1 / -1}
+  #map{height:360px;border-radius:12px;border:1px solid rgba(34,48,74,.85)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  td,th{border-bottom:1px solid rgba(34,48,74,.6);padding:8px;vertical-align:top}
+  th{color:var(--muted);text-align:left}
+  textarea{width:100%;min-height:88px;border-radius:12px;border:1px solid rgba(34,48,74,.9);background:#0d1320;color:var(--txt);padding:10px;font-size:14px}
+  a{color:var(--warn);text-decoration:none}
+  .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(34,48,74,.8);border-radius:999px;padding:8px 10px;background:rgba(0,0,0,.12)}
+  .dot{width:9px;height:9px;border-radius:50%}
+  .dot.good{background:var(--good)}
+  .dot.warn{background:var(--warn)}
+  .dot.bad{background:var(--bad)}
+  ul{margin:8px 0 0 18px;padding:0}
+  li{margin:6px 0;cursor:pointer}
+  .split{display:grid;gap:10px}
+  @media(min-width:900px){ .split{grid-template-columns: 1fr 1fr;} }
 </style>
 </head>
 
 <body>
+<div class="wrap">
 
-<!-- TRIP -->
-<div class="row">
-  <div class="card" style="flex:1">
-    <div class="small">TRIP TOTALE</div>
-    <div class="big" id="odoTot">0.000</div>
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <div>
+        <div style="font-weight:900">Roadbook Logger</div>
+        <div class="muted">GPS di sistema (es. Garmin GLO via Bluetooth GNSS) • rilievo roadbook</div>
+      </div>
+      <div class="pill">
+        <span class="dot bad" id="dotFix"></span>
+        <span class="mono" id="fixText">FIX: —</span>
+      </div>
+    </div>
+
+    <div class="split" style="margin-top:10px">
+      <div class="mono">
+        <div><span class="muted">Precisione:</span> <span id="accText">—</span></div>
+        <div><span class="muted">Ultimo fix:</span> <span id="timeText">—</span></div>
+        <div><span class="muted">Recording:</span> <span id="recText">FERMO</span></div>
+      </div>
+      <div class="btngrid">
+        <button class="btn" id="btnStartGps">📡 Avvia GPS</button>
+        <button class="btn" id="btnPause">⏸️ Pausa</button>
+        <button class="btn" id="btnResume">▶️ Riprendi</button>
+        <button class="btn" id="btnRecenter">🎯 Ricentra</button>
+      </div>
+    </div>
   </div>
-  <div class="card" style="flex:1;cursor:pointer" onclick="addPoint()">
-    <div class="small">TRIP PARZIALE (tap = punto)</div>
-    <div class="big" id="odoParz">0.000</div>
+
+  <div class="row">
+    <div>
+      <div class="card">
+        <div class="muted">TRIP TOTALE</div>
+        <div class="big" id="odoTotal">0.000</div>
+        <div class="muted">km</div>
+        <div style="height:8px"></div>
+        <div class="muted">TRIP PARZIALE</div>
+        <div class="big" id="odoPartial">0.000</div>
+        <div class="muted">km</div>
+      </div>
+
+      <div class="card btngrid">
+        <button class="btn" id="btnPoint">📍 Punto</button>
+        <button class="btn" id="btnPointVoice">🎙️ Punto + nota vocale (5s)</button>
+        <button class="btn btnwide" id="btnExportCsv">📤 Export Excel (CSV)</button>
+        <button class="btn" id="btnExportGpx">🧭 Export traccia GPX</button>
+        <button class="btn" id="btnClear">🗑️ Reset sessione</button>
+      </div>
+
+      <div class="card">
+        <div style="font-weight:900">Timeline</div>
+        <div class="muted">Eventi: START GPS • RIPRENDI • PAUSA • PUNTO</div>
+        <ul id="timeline"></ul>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div id="map"></div>
+        <div class="muted" style="margin-top:8px">
+          La mappa non si autocentra: puoi zoommare/spostarti liberamente. Usa “Ricentra” quando vuoi.
+        </div>
+      </div>
+
+      <div class="card" id="pointEditor" style="display:none">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div>
+            <div style="font-weight:900" id="editorTitle">Punto</div>
+            <div class="muted mono" id="editorMeta">—</div>
+          </div>
+          <button class="btn" style="max-width:220px" id="btnCloseEditor">Chiudi editor</button>
+        </div>
+
+        <div style="height:10px"></div>
+        <textarea id="pointNote" placeholder="Note punto (testo)"></textarea>
+
+        <div class="btngrid" style="margin-top:10px">
+          <button class="btn" id="btnSaveNote">💾 Salva nota</button>
+          <button class="btn" id="btnVoiceOnly">🎙️ Registra nota vocale (5s)</button>
+        </div>
+
+        <div class="mono" style="margin-top:10px">
+          <div><span class="muted">Audio:</span> <span id="audioStatus">—</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="font-weight:900">Punti</div>
+        <div class="muted">Clicca una riga per aprire l’editor e zoommare sul punto.</div>
+        <div style="margin-top:8px;overflow:auto;max-height:280px">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>KM tot</th>
+                <th>KM parz</th>
+                <th>COORDINATE</th>
+                <th>NOTE</th>
+                <th>AUDIO</th>
+              </tr>
+            </thead>
+            <tbody id="points"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
-</div>
 
-<!-- GPS STATUS -->
-<div class="card small">
-  <span id="fix">FIX —</span> |
-  <span id="acc">±— m</span> |
-  <span id="time">—</span> |
-  <span id="rec">REC</span>
-</div>
-
-<!-- MAP -->
-<div class="card">
-  <div id="map">
-    <div id="recenter" onclick="recenter()">🎯</div>
-  </div>
-</div>
-
-<!-- TIMELINE -->
-<div class="card">
-  <button onclick="toggleTimeline()">Timeline</button>
-  <ul id="timeline" class="hidden"></ul>
-</div>
-
-<!-- POINTS -->
-<div class="card">
-<table>
-<thead>
-<tr>
-<th>#</th><th>KM Tot</th><th>KM Parz</th><th>Lat</th><th>Lon</th><th>Ora</th>
-</tr>
-</thead>
-<tbody id="points"></tbody>
-</table>
-</div>
-
-<!-- EXPORT -->
-<div class="card">
-<button onclick="exportCSV()">Export Excel</button>
-<button onclick="exportGPX()">Export GPX</button>
 </div>
 
 <script>
-const state={
-  last:null,recording:true,
-  odoTot:0,odoParz:0,
-  track:[],points:[],timeline:[]
+/* =========================
+   STATO
+========================= */
+const state = {
+  gpsStarted: false,
+  watchId: null,
+
+  hasFix: false,
+  lastFixTime: null,
+  lastAccuracyM: null,
+
+  recording: false,
+
+  odoTotalKm: 0,
+  odoPartialKm: 0,
+
+  last: null,   // {lat, lon, t}
+  track: [],    // [{lat, lon, t, acc}]
+  points: [],   // [{id, kmTotal, kmPartialAtPoint, lat, lon, coord, note, audioUrl, audioName, t}]
+  timeline: [], // [{type, kmTotal, t, refPointId?}]
 };
 
-const map=L.map("map").setView([45,9],13);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
-const line=L.polyline([],{color:"#4dd4ac"}).addTo(map);
+let currentPointId = null;
 
-setTimeout(() => {
-  navigator.geolocation.watchPosition(
-    pos => { /* codice */ },
-    err => { /* errore */ },
-    { enableHighAccuracy:true, maximumAge:0, timeout:10000 }
-  );
-}, 1000);
+/* =========================
+   MAPPA
+========================= */
+const map = L.map("map", { zoomControl: true }).setView([45.0, 9.0], 12);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
 
-  document.getElementById("fix").textContent="FIX OK";
-  document.getElementById("acc").textContent="±"+Math.round(accuracy)+" m";
-  document.getElementById("time").textContent=t.toLocaleTimeString();
+const trackLine = L.polyline([], { color:"#4dd4ac", weight:4, opacity:0.78 }).addTo(map);
+const pointsLayer = L.layerGroup().addTo(map);
+const liveMarker = L.circleMarker([45.0, 9.0], { radius:6, color:"#4dd4ac", weight:2, fillOpacity:0.5 }).addTo(map);
+liveMarker.setStyle({opacity:0, fillOpacity:0});
 
-  if(state.last){
-    const d=haversine(state.last.lat,state.last.lon,lat,lon);
-    state.odoTot+=d;state.odoParz+=d;
-    document.getElementById("odoTot").textContent=state.odoTot.toFixed(3);
-    document.getElementById("odoParz").textContent=state.odoParz.toFixed(3);
-    line.addLatLng([lat,lon]);
-  }
-  state.last={lat,lon,time:t};
-  state.track.push(state.last);
-},{enableHighAccuracy:true});
+/* =========================
+   UTIL
+========================= */
+function pad2(n){ return String(n).padStart(2, "0"); }
 
-function haversine(a,b,c,d){
-  const R=6371;
-  const r=x=>x*Math.PI/180;
-  const x=Math.sin(r(c-a)/2)**2+
-          Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2;
-  return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+function toDegMin(v, isLat){
+  const hem = isLat ? (v >= 0 ? "N" : "S") : (v >= 0 ? "E" : "W");
+  v = Math.abs(v);
+  const deg = Math.floor(v);
+  const min = ((v - deg) * 60).toFixed(3);
+  return `${hem}${deg}°${min}`;
+}
+function fmtCoord(lat, lon){
+  return `${toDegMin(lat,true)} ${toDegMin(lon,false)}`;
+}
+function havMeters(lat1, lon1, lat2, lon2){
+  const R = 6371000;
+  const toR = x => x * Math.PI / 180;
+  const dLat = toR(lat2 - lat1);
+  const dLon = toR(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(toR(lat1)) * Math.cos(toR(lat2)) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function downloadText(filename, text, mime="text/plain;charset=utf-8"){
+  const blob = new Blob([text], { type: mime });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function escXml(s){
+  return String(s ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&apos;");
 }
 
-function addPoint(){
-  if(!state.last)return;
-  const p={
-    id:state.points.length+1,
-    kmTot:state.odoTot,
-    kmParz:state.odoParz,
-    lat:state.last.lat,
-    lon:state.last.lon,
-    time:state.last.time.toLocaleTimeString()
+/* =========================
+   UI FIX/RECORDING
+========================= */
+function setFixUI(hasFix, accM=null){
+  state.hasFix = !!hasFix;
+  state.lastAccuracyM = accM;
+
+  const dot = document.getElementById("dotFix");
+  const fixText = document.getElementById("fixText");
+  const accText = document.getElementById("accText");
+
+  if(!hasFix){
+    dot.className = "dot bad";
+    fixText.textContent = "FIX: NO";
+    accText.textContent = "—";
+    return;
+  }
+
+  const a = (typeof accM === "number") ? accM : null;
+  let cls = "good";
+  if(a != null && a > 15) cls = "warn";
+  if(a != null && a > 40) cls = "bad";
+
+  dot.className = "dot " + cls;
+  fixText.textContent = "FIX: OK";
+  accText.textContent = (a == null) ? "—" : `±${Math.round(a)} m`;
+}
+function setTimeUI(tMs){
+  document.getElementById("timeText").textContent = new Date(tMs).toLocaleTimeString();
+}
+function setRecUI(){
+  document.getElementById("recText").textContent = state.recording ? "REGISTRANDO" : "FERMO";
+}
+function updateTripUI(){
+  document.getElementById("odoTotal").textContent = state.odoTotalKm.toFixed(3);
+  document.getElementById("odoPartial").textContent = state.odoPartialKm.toFixed(3);
+}
+
+/* =========================
+   TIMELINE
+========================= */
+function addTimelineEvent(type, refPointId=null){
+  state.timeline.push({ type, kmTotal: state.odoTotalKm, t: Date.now(), refPointId });
+  renderTimeline();
+}
+function renderTimeline(){
+  const ul = document.getElementById("timeline");
+  ul.innerHTML = "";
+  for(const e of state.timeline){
+    const li = document.createElement("li");
+    const ts = new Date(e.t);
+    const hhmmss = `${pad2(ts.getHours())}:${pad2(ts.getMinutes())}:${pad2(ts.getSeconds())}`;
+    const ref = (e.refPointId != null) ? ` (P${e.refPointId})` : "";
+    li.textContent = `${hhmmss} — ${e.type} @ ${e.kmTotal.toFixed(3)} km${ref}`;
+    li.addEventListener("click", () => {
+      if(e.refPointId != null){
+        const p = state.points.find(x => x.id === e.refPointId);
+        if(p) openPointEditor(p.id, true);
+      }
+    });
+    ul.appendChild(li);
+  }
+}
+
+/* =========================
+   GPS / WATCH
+========================= */
+function startGPS(){
+
+  if(state.watchId !== null){
+  navigator.geolocation.clearWatch(state.watchId);
+  state.watchId = null;
+  }
+
+  if(state.gpsStarted) return;
+
+  if(!navigator.geolocation?.watchPosition){
+    alert("Geolocalizzazione non disponibile in questo browser.");
+    return;
+  }
+
+  state.gpsStarted = true;
+  addTimelineEvent("START GPS");
+
+  state.watchId = navigator.geolocation.watchPosition(
+    pos => onFix(pos),
+    err => onFixError(err),
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+  );
+}
+function onFix(pos){
+  const lat = pos.coords.latitude;
+  const lon = pos.coords.longitude;
+  const acc = pos.coords.accuracy;
+  const t = Date.now();
+
+  setFixUI(true, acc);
+  setTimeUI(t);
+
+  // marker live (senza ricentrare)
+  liveMarker.setLatLng([lat, lon]);
+  liveMarker.setStyle({opacity:1, fillOpacity:0.5});
+
+  // Se non registriamo, aggiorniamo solo "last" per consentire ricentra e punto (se lo vuoi).
+  // Qui scegliamo una regola coerente: durante PAUSA NON registri traccia/trip, ma puoi comunque vedere posizione.
+  state.last = { lat, lon, t, acc };
+
+  // aggiorna SEMPRE lo stato GPS
+  state.last = { lat, lon, t, acc };
+
+  // registra solo se recording
+  if(!state.recording) return;
+
+
+  // Distanza + traccia
+  if(state.track.length > 0){
+    const prev = state.track[state.track.length - 1];
+    const d = havMeters(prev.lat, prev.lon, lat, lon);
+    state.odoTotalKm += d / 1000;
+    state.odoPartialKm += d / 1000;
+  }
+
+  state.track.push({ lat, lon, t, acc });
+  trackLine.addLatLng([lat, lon]);
+  updateTripUI();
+}
+function onFixError(err){
+  setFixUI(false, null);
+  document.getElementById("timeText").textContent = "—";
+}
+
+/* =========================
+   RECORDING CONTROL
+========================= */
+function resumeRecording(){
+  if(!state.gpsStarted){
+    alert("Prima avvia il GPS.");
+    return;
+  }
+  if(!state.recording){
+    state.recording = true;
+    setRecUI();
+
+    // Evita salto distanza al rientro: se riparti, la prima distanza va calcolata dal prossimo punto in track,
+    // quindi non serve azzerare "last", basta che il track riparta dal prossimo fix.
+    addTimelineEvent("RIPRENDI");
+  }
+}
+function pauseRecording(){
+  if(state.recording){
+    state.recording = false;
+    setRecUI();
+    addTimelineEvent("PAUSA");
+  }
+}
+
+/* =========================
+   PUNTI + EDITOR
+========================= */
+function addPoint(withVoice=false){
+  if(!state.last || !state.hasFix){
+    alert("Nessun fix disponibile.");
+    return;
+  }
+  if(!state.gpsStarted){
+    alert("Prima avvia il GPS.");
+    return;
+  }
+
+  const id = state.points.length ? state.points[state.points.length-1].id + 1 : 1;
+
+  const p = {
+    id,
+    kmTotal: state.odoTotalKm,
+    kmPartialAtPoint: state.odoPartialKm,
+    lat: state.last.lat,
+    lon: state.last.lon,
+    coord: fmtCoord(state.last.lat, state.last.lon),
+    note: "",
+    audioUrl: null,
+    audioName: null,
+    t: Date.now()
   };
-  state.points.unshift(p);
-  state.timeline.unshift("P"+p.id+" @ "+p.kmTot.toFixed(3));
-  state.odoParz=0;
-  renderPoints();renderTimeline();
+
+  state.points.push(p);
+  addTimelineEvent("PUNTO", p.id);
+
+  // reset trip parziale come concordato
+  state.odoPartialKm = 0;
+  updateTripUI();
+
+  // marker punto
+  const mk = L.circleMarker([p.lat, p.lon], { radius:6, color:"#ffcc66", weight:2, fillOpacity:0.65 })
+    .addTo(pointsLayer)
+    .bindPopup(`<b>P${p.id}</b><br>${escXml(p.coord)}<br>Tot: ${p.kmTotal.toFixed(3)} km<br>Parz: ${p.kmPartialAtPoint.toFixed(3)} km`);
+
+  mk.on("click", () => openPointEditor(p.id, false));
+
+  renderPoints();
+  openPointEditor(p.id, true);
+
+  if(withVoice) recordVoiceForPoint(p.id);
 }
 
 function renderPoints(){
-  const tb=document.getElementById("points");
-  tb.innerHTML="";
-  state.points.forEach(p=>{
-    tb.innerHTML+=`
-    <tr>
-      <td>${p.id}</td>
-      <td>${p.kmTot.toFixed(3)}</td>
-      <td>${p.kmParz.toFixed(3)}</td>
-      <td>${p.lat.toFixed(6)}</td>
-      <td>${p.lon.toFixed(6)}</td>
-      <td>${p.time}</td>
-    </tr>`;
-  });
+  const tb = document.getElementById("points");
+  tb.innerHTML = "";
+
+  for(const p of state.points){
+    const tr = document.createElement("tr");
+    const notePreview = (p.note || "").trim().slice(0, 24) + (((p.note || "").trim().length > 24) ? "…" : "");
+    const audio = p.audioUrl ? `<a href="${p.audioUrl}" download="${p.audioName}">scarica</a>` : "";
+
+    tr.innerHTML = `
+      <td><b>P${p.id}</b></td>
+      <td class="mono">${p.kmTotal.toFixed(3)}</td>
+      <td class="mono">${p.kmPartialAtPoint.toFixed(3)}</td>
+      <td class="mono">${p.coord}</td>
+      <td>${escXml(notePreview)}</td>
+      <td>${audio}</td>
+    `;
+
+    tr.addEventListener("click", () => openPointEditor(p.id, true));
+    tb.appendChild(tr);
+  }
 }
 
-function toggleTimeline(){
-  document.getElementById("timeline").classList.toggle("hidden");
-}
-function renderTimeline(){
-  const ul=document.getElementById("timeline");
-  ul.innerHTML="";
-  state.timeline.forEach(e=>ul.innerHTML+="<li>"+e+"</li>");
+function openPointEditor(pointId, zoom){
+  const p = state.points.find(x => x.id === pointId);
+  if(!p) return;
+
+  currentPointId = pointId;
+
+  document.getElementById("pointEditor").style.display = "block";
+  document.getElementById("editorTitle").textContent = `Punto P${p.id}`;
+  document.getElementById("editorMeta").textContent = `${p.kmTotal.toFixed(3)} km tot • ${p.kmPartialAtPoint.toFixed(3)} km parz • ${p.coord}`;
+  document.getElementById("pointNote").value = p.note || "";
+  document.getElementById("audioStatus").textContent = p.audioUrl ? p.audioName : "—";
+
+  if(zoom) map.setView([p.lat, p.lon], Math.max(map.getZoom(), 16), { animate:false });
 }
 
+function closePointEditor(){
+  currentPointId = null;
+  document.getElementById("pointEditor").style.display = "none";
+}
+
+function saveNote(){
+  const p = state.points.find(x => x.id === currentPointId);
+  if(!p) return;
+  p.note = document.getElementById("pointNote").value || "";
+  renderPoints();
+}
+
+/* =========================
+   AUDIO (5s)
+========================= */
+async function recordVoiceForPoint(pointId){
+  const p = state.points.find(x => x.id === pointId);
+  if(!p) return;
+
+  if(!navigator.mediaDevices?.getUserMedia){
+    alert("Microfono non disponibile in questo browser.");
+    return;
+  }
+
+  const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+  const rec = new MediaRecorder(stream);
+  const chunks = [];
+
+  rec.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
+  rec.onstop = () => {
+    const blob = new Blob(chunks, { type:"audio/webm" });
+    p.audioUrl = URL.createObjectURL(blob);
+    p.audioName = `P${p.id}_nota.webm`;
+    document.getElementById("audioStatus").textContent = p.audioName;
+    renderPoints();
+    stream.getTracks().forEach(t => t.stop());
+  };
+
+  rec.start();
+  setTimeout(() => rec.stop(), 5000);
+}
+
+/* =========================
+   MAPPA (RICENTRA)
+========================= */
 function recenter(){
-  if(state.last)map.setView([state.last.lat,state.last.lon],16);
+  if(state.last){
+    map.setView([state.last.lat, state.last.lon], Math.max(map.getZoom(), 16), { animate:false });
+  }
 }
 
+/* =========================
+   EXPORT
+========================= */
 function exportCSV(){
-  let csv="ID;KM_TOT;KM_PARZ;LAT;LON;ORA;N° BOX PRERIL\n";
-  state.points.forEach(p=>{
-    csv+=`${p.id};${p.kmTot};${p.kmParz};${p.lat};${p.lon};${p.time};\n`;
-  });
-  download("roadbook.csv",csv);
+  // Excel-friendly con ; + note incluse
+  let csv = "PUNTO;KM_TOT;KM_PARZ;COORDINATE;NOTE\n";
+  for(const p of state.points){
+    const note = String(p.note ?? "").replaceAll("\n"," ").replaceAll("\r"," ").replaceAll("; ", " ").replaceAll(";", ",");
+    csv += `${p.id};${p.kmTotal.toFixed(3)};${p.kmPartialAtPoint.toFixed(3)};${p.coord};${note}\n`;
+  }
+  downloadText("roadbook_punti.csv", csv, "text/csv;charset=utf-8");
 }
 
 function exportGPX(){
-  let gpx=`<?xml version="1.0"?><gpx version="1.1"><trk><trkseg>`;
-  state.track.forEach(p=>{
-    gpx+=`<trkpt lat="${p.lat}" lon="${p.lon}"></trkpt>`;
-  });
-  gpx+=`</trkseg></trk></gpx>`;
-  download("track.gpx",gpx);
+  // GPX con traccia + waypoint punti (note nel <desc>)
+  let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n` +
+`<gpx version="1.1" creator="Roadbook Logger" xmlns="http://www.topografix.com/GPX/1/1">\n`;
+
+  // Waypoints
+  for(const p of state.points){
+    gpx +=
+`  <wpt lat="${p.lat}" lon="${p.lon}">\n` +
+`    <name>P${p.id}</name>\n` +
+`    <desc>${escXml(`Tot ${p.kmTotal.toFixed(3)} km; Parz ${p.kmPartialAtPoint.toFixed(3)} km; ${p.coord}${p.note ? " | " + p.note : ""}`)}</desc>\n` +
+`    <time>${new Date(p.t).toISOString()}</time>\n` +
+`  </wpt>\n`;
+  }
+
+  // Traccia
+  gpx += `  <trk>\n    <name>Rilievo</name>\n    <trkseg>\n`;
+  for(const pt of state.track){
+    gpx +=
+`      <trkpt lat="${pt.lat}" lon="${pt.lon}">\n` +
+`        <time>${new Date(pt.t).toISOString()}</time>\n` +
+`      </trkpt>\n`;
+  }
+  gpx += `    </trkseg>\n  </trk>\n</gpx>\n`;
+
+  downloadText("traccia_rilievo.gpx", gpx, "application/gpx+xml;charset=utf-8");
 }
 
-function download(n,t){
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(new Blob([t]));
-  a.download=n;a.click();
+/* =========================
+   RESET SESSIONE
+========================= */
+function resetSession(){
+  if(!confirm("Resettare sessione? Cancella traccia, punti, timeline e trip.")) return;
+
+  state.recording = false;
+  setRecUI();
+
+  state.odoTotalKm = 0;
+  state.odoPartialKm = 0;
+  updateTripUI();
+
+  state.track = [];
+  state.points = [];
+  state.timeline = [];
+  renderTimeline();
+  renderPoints();
+
+  trackLine.setLatLngs([]);
+  pointsLayer.clearLayers();
 }
+
+/* =========================
+   HOOK UI
+========================= */
+document.getElementById("btnStartGps").addEventListener("click", () => {
+  startGPS();
+  // scelta pratica: dopo avvio GPS, non partiamo automaticamente a registrare.
+  // premi "Riprendi" quando sei pronto a loggare.
+  setRecUI();
+});
+
+document.getElementById("btnPause").addEventListener("click", pauseRecording);
+document.getElementById("btnResume").addEventListener("click", resumeRecording);
+document.getElementById("btnRecenter").addEventListener("click", recenter);
+
+document.getElementById("btnPoint").addEventListener("click", () => addPoint(false));
+document.getElementById("btnPointVoice").addEventListener("click", () => addPoint(true));
+
+document.getElementById("btnExportCsv").addEventListener("click", exportCSV);
+document.getElementById("btnExportGpx").addEventListener("click", exportGPX);
+document.getElementById("btnClear").addEventListener("click", resetSession);
+
+document.getElementById("btnSaveNote").addEventListener("click", saveNote);
+document.getElementById("btnCloseEditor").addEventListener("click", closePointEditor);
+document.getElementById("btnVoiceOnly").addEventListener("click", () => {
+  if(currentPointId == null) return;
+  recordVoiceForPoint(currentPointId);
+});
+
+// init UI
+setFixUI(false, null);
+setRecUI();
+updateTripUI();
+renderTimeline();
+renderPoints();
 </script>
 </body>
 </html>
-
-</html>
-
-
