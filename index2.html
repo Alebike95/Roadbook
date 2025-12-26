@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roadbook Logger</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+body{margin:0;background:#0b0f14;color:#e8eef6;font-family:system-ui}
+.card{background:#121826;border-radius:14px;padding:10px;margin:8px}
+.row{display:flex;gap:8px}
+.big{font-size:34px;font-family:monospace}
+.small{font-size:12px;color:#9fb0c3}
+#map{height:320px;border-radius:14px;position:relative}
+#recenter{
+  position:absolute;bottom:12px;right:12px;
+  background:#1b2536;border-radius:50%;
+  width:44px;height:44px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;cursor:pointer
+}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{border-bottom:1px solid #223;padding:6px}
+button{background:#1b2536;color:#fff;border:none;border-radius:10px;padding:10px}
+.hidden{display:none}
+</style>
+</head>
+
+<body>
+
+<!-- TRIP -->
+<div class="row">
+  <div class="card" style="flex:1">
+    <div class="small">TRIP TOTALE</div>
+    <div class="big" id="odoTot">0.000</div>
+  </div>
+  <div class="card" style="flex:1;cursor:pointer" onclick="addPoint()">
+    <div class="small">TRIP PARZIALE (tap = punto)</div>
+    <div class="big" id="odoParz">0.000</div>
+  </div>
+</div>
+
+<!-- GPS STATUS -->
+<div class="card small">
+  <span id="fix">FIX —</span> |
+  <span id="acc">±— m</span> |
+  <span id="time">—</span> |
+  <span id="rec">REC</span>
+</div>
+
+<!-- MAP -->
+<div class="card">
+  <div id="map">
+    <div id="recenter" onclick="recenter()">🎯</div>
+  </div>
+</div>
+
+<!-- TIMELINE -->
+<div class="card">
+  <button onclick="toggleTimeline()">Timeline</button>
+  <ul id="timeline" class="hidden"></ul>
+</div>
+
+<!-- POINTS -->
+<div class="card">
+<table>
+<thead>
+<tr>
+<th>#</th><th>KM Tot</th><th>KM Parz</th><th>Lat</th><th>Lon</th><th>Ora</th>
+</tr>
+</thead>
+<tbody id="points"></tbody>
+</table>
+</div>
+
+<!-- EXPORT -->
+<div class="card">
+<button onclick="exportCSV()">Export Excel</button>
+<button onclick="exportGPX()">Export GPX</button>
+</div>
+
+<script>
+const state={
+  last:null,recording:true,
+  odoTot:0,odoParz:0,
+  track:[],points:[],timeline:[]
+};
+
+const map=L.map("map").setView([45,9],13);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+const line=L.polyline([],{color:"#4dd4ac"}).addTo(map);
+
+navigator.geolocation.watchPosition(pos=>{
+  const {latitude:lat,longitude:lon,accuracy}=pos.coords;
+  const t=new Date();
+  document.getElementById("fix").textContent="FIX OK";
+  document.getElementById("acc").textContent="±"+Math.round(accuracy)+" m";
+  document.getElementById("time").textContent=t.toLocaleTimeString();
+
+  if(state.last){
+    const d=haversine(state.last.lat,state.last.lon,lat,lon);
+    state.odoTot+=d;state.odoParz+=d;
+    document.getElementById("odoTot").textContent=state.odoTot.toFixed(3);
+    document.getElementById("odoParz").textContent=state.odoParz.toFixed(3);
+    line.addLatLng([lat,lon]);
+  }
+  state.last={lat,lon,time:t};
+  state.track.push(state.last);
+},{enableHighAccuracy:true});
+
+function haversine(a,b,c,d){
+  const R=6371;
+  const r=x=>x*Math.PI/180;
+  const x=Math.sin(r(c-a)/2)**2+
+          Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2;
+  return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+
+function addPoint(){
+  if(!state.last)return;
+  const p={
+    id:state.points.length+1,
+    kmTot:state.odoTot,
+    kmParz:state.odoParz,
+    lat:state.last.lat,
+    lon:state.last.lon,
+    time:state.last.time.toLocaleTimeString()
+  };
+  state.points.unshift(p);
+  state.timeline.unshift("P"+p.id+" @ "+p.kmTot.toFixed(3));
+  state.odoParz=0;
+  renderPoints();renderTimeline();
+}
+
+function renderPoints(){
+  const tb=document.getElementById("points");
+  tb.innerHTML="";
+  state.points.forEach(p=>{
+    tb.innerHTML+=`
+    <tr>
+      <td>${p.id}</td>
+      <td>${p.kmTot.toFixed(3)}</td>
+      <td>${p.kmParz.toFixed(3)}</td>
+      <td>${p.lat.toFixed(6)}</td>
+      <td>${p.lon.toFixed(6)}</td>
+      <td>${p.time}</td>
+    </tr>`;
+  });
+}
+
+function toggleTimeline(){
+  document.getElementById("timeline").classList.toggle("hidden");
+}
+function renderTimeline(){
+  const ul=document.getElementById("timeline");
+  ul.innerHTML="";
+  state.timeline.forEach(e=>ul.innerHTML+="<li>"+e+"</li>");
+}
+
+function recenter(){
+  if(state.last)map.setView([state.last.lat,state.last.lon],16);
+}
+
+function exportCSV(){
+  let csv="ID;KM_TOT;KM_PARZ;LAT;LON;ORA;N° BOX PRERIL\n";
+  state.points.forEach(p=>{
+    csv+=`${p.id};${p.kmTot};${p.kmParz};${p.lat};${p.lon};${p.time};\n`;
+  });
+  download("roadbook.csv",csv);
+}
+
+function exportGPX(){
+  let gpx=`<?xml version="1.0"?><gpx version="1.1"><trk><trkseg>`;
+  state.track.forEach(p=>{
+    gpx+=`<trkpt lat="${p.lat}" lon="${p.lon}"></trkpt>`;
+  });
+  gpx+=`</trkseg></trk></gpx>`;
+  download("track.gpx",gpx);
+}
+
+function download(n,t){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([t]));
+  a.download=n;a.click();
+}
+</script>
+</body>
+</html>
