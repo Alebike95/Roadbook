@@ -93,9 +93,14 @@ const map=L.map("map").setView([45,9],13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
 const line=L.polyline([],{color:"#4dd4ac"}).addTo(map);
 
-navigator.geolocation.watchPosition(pos=>{
-  const {latitude:lat,longitude:lon,accuracy}=pos.coords;
-  const t=new Date();
+setTimeout(() => {
+  navigator.geolocation.watchPosition(
+    pos => { /* codice */ },
+    err => { /* errore */ },
+    { enableHighAccuracy:true, maximumAge:0, timeout:10000 }
+  );
+}, 1000);
+
   document.getElementById("fix").textContent="FIX OK";
   document.getElementById("acc").textContent="±"+Math.round(accuracy)+" m";
   document.getElementById("time").textContent=t.toLocaleTimeString();
@@ -191,4 +196,5 @@ function download(n,t){
 </html>
 
 </html>
+
 
