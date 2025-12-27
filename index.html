@@ -210,7 +210,7 @@ const state = {
   odoTotKm: 0,
   odoParzKm: 0,
 
-  // Traccia (Opzione B): segmenti separati, niente MultiGeometry
+  // Traccia: segmenti separati
   trackSegments: [],               // array di segmenti; ogni segmento è array di {lat,lon,timeMs}
   currentSegment: null,            // riferimento al segmento attivo in REC
   trackLines: [],                  // polylines Leaflet (una per segmento)
@@ -285,7 +285,7 @@ function startGPS() {
     state.watchId = null;
   }
 
-  // Start in PAUSA (richiesto)
+  // Start in PAUSA
   state.recording = false;
   state.currentSegment = null;
   updateRecUI();
@@ -393,7 +393,7 @@ function pushSegmentPoint(p, opts = {}) {
 }
 
 /* =======================
-   Marker: punti e foto (diversi)
+   Marker: punti e foto
 ======================= */
 function createPointMarker(p) {
   const marker = L.circleMarker([p.lat, p.lon], {
@@ -442,8 +442,6 @@ function createPhotoMarker(photo) {
 
 /* =======================
    Rinumera punti: consecutivi senza salti
-   Regola: il primo punto cronologico = 1
-   (tabella resta con ultimo punto in alto)
 ======================= */
 function renumberPointsAndRebuildMarkers() {
   // rimuovi marker esistenti
@@ -463,7 +461,6 @@ function renumberPointsAndRebuildMarkers() {
   // sistema selezione attiva (se esiste ancora una riga)
   if (state.points.length === 0) state.activePointId = null;
   else if (state.activePointId != null) {
-    // se avevo un id non più valido, lo sposto sull'ultimo (in alto)
     const ids = new Set(state.points.map(x => x.id));
     if (!ids.has(state.activePointId)) state.activePointId = state.points[0].id;
   }
@@ -509,11 +506,9 @@ function addPoint() {
   state.odoParzKm = 0;
   updateTripsUI();
 
-  // rinumera e ricrea marker per avere id consecutivi sempre
   renumberPointsAndRebuildMarkers();
   renderPointsTable();
 
-  // seleziona l'ultimo inserito (che è in alto, con id massimo)
   if (state.points.length) state.activePointId = state.points[0].id;
   highlightActiveRow();
 
@@ -654,7 +649,7 @@ function exportCSV() {
 }
 
 /* =======================
-   Export GPX: 1 trk con più trkseg
+   Export GPX
 ======================= */
 function exportGPX() {
   let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n`;
@@ -686,7 +681,7 @@ function exportGPX() {
 }
 
 /* =======================
-   Export KMZ: più Placemark, 1 LineString ciascuno (niente MultiGeometry)
+   Export KMZ
 ======================= */
 async function exportKMZ() {
   const zip = new JSZip();
@@ -782,7 +777,7 @@ function buildKML({ zip, filesFolder }) {
 
 /* =======================
    Reset trip: tap lungo 3s su Trip Totale
-   Azzera trip + TRACCE (segmenti e polylines) - NON cancella punti/foto
+   Azzera SOLO km, NON cancella tracce
 ======================= */
 (function setupLongPressResetTot() {
   const card = document.getElementById("tripTotCard");
@@ -796,17 +791,14 @@ function buildKML({ zip, filesFolder }) {
     timer = setTimeout(() => {
       if (!pressed) return;
 
+      // azzera solo i km
       state.odoTotKm = 0;
       state.odoParzKm = 0;
       updateTripsUI();
 
-      // reset tracce
-      state.trackSegments = [];
+      // NON cancelliamo più trackSegments, trackLines, polylines, punti, foto
+      // chiudiamo solo il segmento corrente
       state.currentSegment = null;
-
-      // rimuovi polylines dalla mappa
-      state.trackLines.forEach(l => map.removeLayer(l));
-      state.trackLines = [];
 
       if (navigator.vibrate) navigator.vibrate(80);
       toast("Trip totale azzerato");
