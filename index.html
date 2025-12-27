@@ -201,17 +201,22 @@ textarea{width:100%;resize:vertical}
 ======================= */
 const state = {
   watchId: null,
-  recording: false,            // start GPS => PAUSA
-  lastFix: null,               // ultimo fix (sempre)
-  lastFixTimeMs: null,         // per Hz
-  lastRecFix: null,            // ultimo fix usato per distanza in REC
+  recording: false,                // start GPS => PAUSA
+  lastFix: null,                   // ultimo fix (sempre)
+  lastFixTimeMs: null,             // per Hz
 
+  // Trip
   odoTotKm: 0,
   odoParzKm: 0,
 
-  trackRec: [],                // SOLO REC: {lat,lon,timeMs}
-  points: [],                  // ultimo in alto
-  photos: [],                  // {id,lat,lon,timeStr,dataUrl,desc}
+  // Traccia (Opzione B): segmenti separati, niente MultiGeometry
+  trackSegments: [],               // array di segmenti; ogni segmento è array di {lat,lon,timeMs}
+  currentSegment: null,            // riferimento al segmento attivo in REC
+  trackLines: [],                  // polylines Leaflet (una per segmento)
+
+  // Dati
+  points: [],                      // ultimo in alto (unshift)
+  photos: [],                      // {id,lat,lon,timeStr,dataUrl,desc}
 
   nextPointId: 1,
   nextPhotoId: 1,
@@ -226,8 +231,6 @@ const state = {
 ======================= */
 const map = L.map("map").setView([45, 9], 13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
-
-const trackLine = L.polyline([], { color: "#4dd4ac", weight: 4 }).addTo(map);
 
 function recenter() {
   if (state.lastFix) map.setView([state.lastFix.lat, state.lastFix.lon], 16);
@@ -281,15 +284,16 @@ function startGPS() {
     state.watchId = null;
   }
 
+  // Start in PAUSA (richiesto)
   state.recording = false;
-  state.lastRecFix = null;
+  state.currentSegment = null;
   updateRecUI();
 
   setGpsUI({ fix: "FIX …", acc: "±— m", time: "—", hz: "— Hz" });
 
   const opts = { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 };
-
   state.watchId = navigator.geolocation.watchPosition(onFix, onFixError, opts);
+
   toast("GPS avviato (PAUSA)");
 }
 
@@ -299,7 +303,7 @@ function onFix(pos) {
   const acc = pos.coords.accuracy;
   const nowMs = Date.now();
 
-  // Hz sempre aggiornato
+  // Hz sempre
   let hz = "— Hz";
   if (state.lastFixTimeMs != null) {
     const dt = (nowMs - state.lastFixTimeMs) / 1000;
@@ -314,27 +318,14 @@ function onFix(pos) {
     hz
   });
 
-  const fix = { lat, lon, timeMs: nowMs };
-  state.lastFix = fix;
+  // aggiorna ultimo fix sempre
+  state.lastFix = { lat, lon, timeMs: nowMs };
 
-  if (!state.recording) return;
+  // se non REC o segmento non attivo: non registriamo traccia né trip
+  if (!state.recording || !state.currentSegment) return;
 
-  // In REC: il primo fix diventa inizio traccia (sempre)
-  if (!state.lastRecFix) {
-    state.lastRecFix = fix;
-    pushTrackPoint(fix);
-    return;
-  }
-
-  const dKm = haversineKm(state.lastRecFix.lat, state.lastRecFix.lon, lat, lon);
-
-  // Niente filtri “pericolosi”: se arriva il fix, lo registriamo
-  state.odoTotKm += dKm;
-  state.odoParzKm += dKm;
-  updateTripsUI();
-
-  state.lastRecFix = fix;
-  pushTrackPoint(fix);
+  // aggiungi punto al segmento corrente + polyline
+  pushSegmentPoint(state.lastFix);
 }
 
 function onFixError(err) {
@@ -358,30 +349,55 @@ function toggleRec() {
   updateRecUI();
 
   if (state.recording) {
-    // Aggancio immediato: se ho già un fix, diventa il primo punto traccia
-    state.lastRecFix = null;
+    // nuovo segmento
+    state.currentSegment = [];
+    state.trackSegments.push(state.currentSegment);
+
+    const line = L.polyline([], { color: "#4dd4ac", weight: 4 }).addTo(map);
+    state.trackLines.push(line);
+
+    // se ho già un fix: lo uso subito come primo punto del segmento
     if (state.lastFix) {
-      state.lastRecFix = state.lastFix;
-      pushTrackPoint(state.lastFix);
+      pushSegmentPoint(state.lastFix, { isFirst: true });
     }
+
     toast("REC attivo");
   } else {
-    state.lastRecFix = null;
+    // pausa: chiudo segmento
+    state.currentSegment = null;
     toast("PAUSA");
   }
 }
 
-function pushTrackPoint(p) {
-  // Evita duplicati identici consecutivi
-  const last = state.trackRec.length ? state.trackRec[state.trackRec.length - 1] : null;
+function pushSegmentPoint(p, opts = {}) {
+  const seg = state.currentSegment;
+  const line = state.trackLines[state.trackLines.length - 1];
+  if (!seg || !line) return;
+
+  const last = seg.length ? seg[seg.length - 1] : null;
+
+  // evita duplicati identici consecutivi
   if (last && last.lat === p.lat && last.lon === p.lon) return;
 
-  state.trackRec.push({ lat: p.lat, lon: p.lon, timeMs: p.timeMs });
-  trackLine.addLatLng([p.lat, p.lon]);
+  // distanza e trip: solo se non è il primo punto del segmento
+  if (last) {
+    const dKm = haversineKm(last.lat, last.lon, p.lat, p.lon);
+    state.odoTotKm += dKm;
+    state.odoParzKm += dKm;
+    updateTripsUI();
+  } else {
+    // primo punto: niente distanza
+    if (!opts.isFirst) {
+      // (non usato, ma lasciato per chiarezza)
+    }
+  }
+
+  seg.push({ lat: p.lat, lon: p.lon, timeMs: p.timeMs });
+  line.addLatLng([p.lat, p.lon]);
 }
 
 /* =======================
-   Marker: punti e foto
+   Marker: punti e foto (diversi)
 ======================= */
 function createPointMarker(p) {
   const marker = L.circleMarker([p.lat, p.lon], {
@@ -587,22 +603,29 @@ function exportCSV() {
 }
 
 /* =======================
-   Export GPX (traccia REC + waypoint punti + waypoint foto)
+   Export GPX: 1 trk con più trkseg
 ======================= */
 function exportGPX() {
   let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   gpx += `<gpx version="1.1" creator="Roadbook Logger" xmlns="http://www.topografix.com/GPX/1/1">\n`;
+  gpx += `  <trk><name>Track REC</name>\n`;
 
-  gpx += `  <trk><name>Track REC</name><trkseg>\n`;
-  state.trackRec.forEach(p => {
-    gpx += `    <trkpt lat="${p.lat}" lon="${p.lon}"></trkpt>\n`;
+  state.trackSegments.forEach(seg => {
+    gpx += `    <trkseg>\n`;
+    seg.forEach(p => {
+      gpx += `      <trkpt lat="${p.lat}" lon="${p.lon}"></trkpt>\n`;
+    });
+    gpx += `    </trkseg>\n`;
   });
-  gpx += `  </trkseg></trk>\n`;
 
+  gpx += `  </trk>\n`;
+
+  // Waypoint punti
   state.points.slice().reverse().forEach(p => {
     gpx += `  <wpt lat="${p.lat}" lon="${p.lon}"><name>${p.id}</name></wpt>\n`;
   });
 
+  // Waypoint foto
   state.photos.forEach(ph => {
     gpx += `  <wpt lat="${ph.lat}" lon="${ph.lon}"><name>Foto ${ph.id}</name></wpt>\n`;
   });
@@ -612,7 +635,7 @@ function exportGPX() {
 }
 
 /* =======================
-   Export KMZ (traccia REC + punti + foto con immagini)
+   Export KMZ: più Placemark, 1 LineString ciascuno (niente MultiGeometry)
 ======================= */
 async function exportKMZ() {
   const zip = new JSZip();
@@ -626,7 +649,23 @@ async function exportKMZ() {
 }
 
 function buildKML({ zip, filesFolder }) {
-  const trackCoords = state.trackRec.map(p => `${p.lon},${p.lat},0`).join(" ");
+  const tracksKml = state.trackSegments.map((seg, i) => {
+    const coords = seg.map(p => `${p.lon},${p.lat},0`).join(" ");
+    return `
+    <Placemark>
+      <name>Track ${i + 1}</name>
+      <Style>
+        <LineStyle>
+          <color>ffacd44d</color>
+          <width>4</width>
+        </LineStyle>
+      </Style>
+      <LineString>
+        <tessellate>1</tessellate>
+        <coordinates>${coords}</coordinates>
+      </LineString>
+    </Placemark>`;
+  }).join("\n");
 
   const pointsKml = state.points.slice().reverse().map(p => {
     const descParts = [
@@ -681,21 +720,7 @@ function buildKML({ zip, filesFolder }) {
   <Document>
     <name>Roadbook Logger</name>
 
-    <Style id="trackStyle">
-      <LineStyle>
-        <color>ffacd44d</color>
-        <width>4</width>
-      </LineStyle>
-    </Style>
-
-    <Placemark>
-      <name>Track REC</name>
-      <styleUrl>#trackStyle</styleUrl>
-      <LineString>
-        <tessellate>1</tessellate>
-        <coordinates>${trackCoords}</coordinates>
-      </LineString>
-    </Placemark>
+    ${tracksKml}
 
     ${pointsKml}
 
@@ -706,7 +731,7 @@ function buildKML({ zip, filesFolder }) {
 
 /* =======================
    Reset trip: tap lungo 3s su Trip Totale
-   Azzera trip + traccia REC (non cancella punti/foto)
+   Azzera trip + TRACCE (segmenti e polylines) - NON cancella punti/foto
 ======================= */
 (function setupLongPressResetTot() {
   const card = document.getElementById("tripTotCard");
@@ -724,9 +749,13 @@ function buildKML({ zip, filesFolder }) {
       state.odoParzKm = 0;
       updateTripsUI();
 
-      state.trackRec = [];
-      state.lastRecFix = null;
-      trackLine.setLatLngs([]);
+      // reset tracce
+      state.trackSegments = [];
+      state.currentSegment = null;
+
+      // rimuovi polylines dalla mappa
+      state.trackLines.forEach(l => map.removeLayer(l));
+      state.trackLines = [];
 
       if (navigator.vibrate) navigator.vibrate(80);
       toast("Trip totale azzerato");
@@ -785,5 +814,6 @@ function downloadBlob(name, blob) {
   a.click();
 }
 </script>
+
 </body>
 </html>
