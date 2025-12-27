@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="it">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Roadbook Logger</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -23,9 +23,9 @@
 body{margin:0;background:var(--bg);color:#e8eef6;font-family:system-ui}
 .card{background:var(--card);border-radius:14px;padding:10px;margin:8px}
 
+/* top */
 .top-row{display:flex;gap:8px;align-items:stretch}
 .trip-card{flex:1}
-
 .photo-btn{
   width:56px;
   background:var(--btn);
@@ -39,17 +39,18 @@ body{margin:0;background:var(--bg);color:#e8eef6;font-family:system-ui}
   -webkit-user-select:none;
 }
 
+/* numbers */
 .big{
   font-size:56px;
   font-family:monospace;
   line-height:1;
   text-align:right;
-  padding-right:2ch;
+  padding-right:2ch; /* rientro 2 */
 }
-
 .label{font-size:11px;color:var(--muted)}
 .small{font-size:12px;color:var(--muted)}
 
+/* buttons */
 button{
   background:var(--btn);
   color:#fff;
@@ -59,15 +60,13 @@ button{
   font-size:12px;
   white-space:nowrap;
 }
-
 .gps-bar{display:flex;align-items:center;gap:8px}
 .gps-info{flex:1;display:flex;gap:10px;justify-content:center;white-space:nowrap;overflow:hidden}
-
 #recBtn.rec{color:var(--ok)}
 #recBtn.pause{color:var(--warn)}
 
+/* map */
 #map{height:320px;border-radius:14px;position:relative}
-
 #recenter{
   position:absolute;
   bottom:12px;
@@ -87,6 +86,7 @@ button{
   pointer-events:auto;
 }
 
+/* table */
 table{width:100%;border-collapse:collapse;font-size:13px}
 td,th{border-bottom:1px solid var(--line);padding:6px;vertical-align:middle}
 thead th{color:var(--muted);font-weight:600}
@@ -97,6 +97,7 @@ tbody tr.active{
   background:rgba(77,212,172,.06);
 }
 
+/* inputs */
 input,textarea{
   background:var(--btn);
   color:#fff;
@@ -107,6 +108,7 @@ input,textarea{
 textarea{width:100%;resize:vertical}
 .input-att{width:44px}
 
+/* toast */
 .toast{
   position:fixed;
   left:50%;
@@ -126,7 +128,7 @@ textarea{width:100%;resize:vertical}
 }
 .toast.show{opacity:1}
 
-/* Marker foto */
+/* photo marker */
 .photo-pin{
   width:28px;
   height:28px;
@@ -157,14 +159,12 @@ textarea{width:100%;resize:vertical}
 <!-- GPS BAR -->
 <div class="card gps-bar small">
   <button onclick="startGPS()">📡</button>
-
   <div class="gps-info">
     <span id="fix">FIX —</span>
     <span id="acc">±— m</span>
     <span id="time">—</span>
     <span id="hz">— Hz</span>
   </div>
-
   <button id="recBtn" class="pause" onclick="toggleRec()">PAUSA</button>
 </div>
 
@@ -183,19 +183,19 @@ textarea{width:100%;resize:vertical}
 
 <!-- TABLE -->
 <div class="card">
-<table>
-<thead>
-<tr>
-  <th>#</th>
-  <th>KM Tot</th>
-  <th>KM Parz</th>
-  <th>Ora</th>
-  <th>Att</th>
-  <th>PreRil</th>
-</tr>
-</thead>
-<tbody id="points"></tbody>
-</table>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>KM Tot</th>
+        <th>KM Parz</th>
+        <th>Ora</th>
+        <th>Att</th>
+        <th>PreRil</th>
+      </tr>
+    </thead>
+    <tbody id="points"></tbody>
+  </table>
 </div>
 
 <!-- EXPORT -->
@@ -214,15 +214,17 @@ textarea{width:100%;resize:vertical}
 ======================= */
 const state={
   watchId:null,
-  recording:false,              // parte in PAUSA
-  lastFix:null,                 // ultimo fix GPS (sempre, anche in pausa)
-  lastFixTimeMs:null,           // per Hz
+  recording:false,                 // start GPS => PAUSA
+  lastFix:null,                    // ultimo fix (sempre)
+  lastFixTimeMs:null,              // per Hz
+  lastRecFix:null,                 // base per calcolo distanze in REC
+
   odoTotKm:0,
   odoParzKm:0,
 
-  trackRec:[],                  // SOLO REC: [{lat,lon,timeMs}]
-  points:[],                    // ultimo in alto (unshift): {id, kmTot, kmParz, lat, lon, timeStr, att, preril}
-  photos:[],                    // {id, lat, lon, timeStr, dataUrl, desc}
+  trackRec:[],                     // SOLO REC: {lat,lon,timeMs}
+  points:[],                       // ultimo in alto (unshift)
+  photos:[],                       // {id,lat,lon,timeStr,dataUrl,desc}
 
   nextPointId:1,
   nextPhotoId:1,
@@ -271,11 +273,11 @@ function updateRecUI(){
   }
 }
 
-function setGpsStatus({fixText, accText, timeText, hzText}){
-  if(fixText!=null) document.getElementById("fix").textContent=fixText;
-  if(accText!=null) document.getElementById("acc").textContent=accText;
-  if(timeText!=null) document.getElementById("time").textContent=timeText;
-  if(hzText!=null) document.getElementById("hz").textContent=hzText;
+function setGpsUI({fix,acc,time,hz}){
+  if(fix!==undefined) document.getElementById("fix").textContent=fix;
+  if(acc!==undefined) document.getElementById("acc").textContent=acc;
+  if(time!==undefined) document.getElementById("time").textContent=time;
+  if(hz!==undefined) document.getElementById("hz").textContent=hz;
 }
 
 /* =======================
@@ -292,20 +294,16 @@ function startGPS(){
     state.watchId=null;
   }
 
-  // richiesta: quando avvio GPS, tool in PAUSA
+  // Start in PAUSA
   state.recording=false;
+  state.lastRecFix=null;
   updateRecUI();
 
-  setGpsStatus({fixText:"FIX …", accText:"±— m", timeText:"—", hzText:"— Hz"});
+  setGpsUI({fix:"FIX …",acc:"±— m",time:"—",hz:"— Hz"});
 
   const opts={enableHighAccuracy:true, maximumAge:0, timeout:20000};
 
-  state.watchId=navigator.geolocation.watchPosition(
-    (pos)=>onFix(pos),
-    (err)=>onFixError(err),
-    opts
-  );
-
+  state.watchId=navigator.geolocation.watchPosition(onFix, onFixError, opts);
   toast("GPS avviato (PAUSA)");
 }
 
@@ -315,40 +313,46 @@ function onFix(pos){
   const acc=pos.coords.accuracy;
   const nowMs=Date.now();
 
-  // Hz
-  let hzText="— Hz";
+  // Hz (sempre)
+  let hz="— Hz";
   if(state.lastFixTimeMs!=null){
     const dt=(nowMs-state.lastFixTimeMs)/1000;
-    if(dt>0.001) hzText=(1/dt).toFixed(1)+" Hz";
+    if(dt>0.0001) hz=(1/dt).toFixed(1)+" Hz";
   }
   state.lastFixTimeMs=nowMs;
 
-  setGpsStatus({
-    fixText:"FIX OK",
-    accText:"±"+Math.round(acc)+" m",
-    timeText:new Date().toLocaleTimeString(),
-    hzText
+  setGpsUI({
+    fix:"FIX OK",
+    acc:"±"+Math.round(acc)+" m",
+    time:new Date().toLocaleTimeString(),
+    hz
   });
 
-  const currentFix={lat,lon,timeMs:nowMs};
-  const prevFix=state.lastFix;
-  state.lastFix=currentFix;
+  state.lastFix={lat,lon,timeMs:nowMs};
 
-  if(!prevFix) return;
+  // se non REC, non registriamo track/distanze
+  if(!state.recording) return;
 
-  if(state.recording){
-    const dKm=haversineKm(prevFix.lat,prevFix.lon,lat,lon);
-
-    // filtro minimo anti “rumore” (puoi abbassarlo/azzerarlo se vuoi)
-    if(dKm < 0.000003) return; // ~3 mm, praticamente nulla: evita dt strani
-
-    state.odoTotKm+=dKm;
-    state.odoParzKm+=dKm;
-    updateTripsUI();
-
-    state.trackRec.push(currentFix);
+  // primo fix REC: inizializza
+  if(!state.lastRecFix){
+    state.lastRecFix=state.lastFix;
+    state.trackRec.push(state.lastFix);
     trackLine.addLatLng([lat,lon]);
+    return;
   }
+
+  const dKm=haversineKm(state.lastRecFix.lat, state.lastRecFix.lon, lat, lon);
+
+  // filtro minimo anti-jitter (molto leggero)
+  if(dKm < 0.00001) return; // 0.01 m
+
+  state.odoTotKm += dKm;
+  state.odoParzKm += dKm;
+  updateTripsUI();
+
+  state.lastRecFix=state.lastFix;
+  state.trackRec.push(state.lastFix);
+  trackLine.addLatLng([lat,lon]);
 }
 
 function onFixError(err){
@@ -358,8 +362,8 @@ function onFixError(err){
     if(err.code===2) msg="GPS non disponibile";
     if(err.code===3) msg="GPS timeout";
   }
-  setGpsStatus({fixText:msg});
-  toast(msg);
+  setGpsUI({fix:msg});
+  toast(msg,1500);
 }
 
 function toggleRec(){
@@ -370,26 +374,16 @@ function toggleRec(){
   state.recording=!state.recording;
   updateRecUI();
 
-  // Se stai entrando in REC e non hai ancora un punto in trackRec, aggiungi il fix attuale come start
-  if(state.recording && state.lastFix){
-    if(state.trackRec.length===0){
-      state.trackRec.push(state.lastFix);
-      trackLine.addLatLng([state.lastFix.lat,state.lastFix.lon]);
-    }else{
-      // se ultima coord uguale, non duplicare
-      const last=state.trackRec[state.trackRec.length-1];
-      if(last.lat!==state.lastFix.lat || last.lon!==state.lastFix.lon){
-        state.trackRec.push(state.lastFix);
-        trackLine.addLatLng([state.lastFix.lat,state.lastFix.lon]);
-      }
-    }
+  if(state.recording){
+    state.lastRecFix=null; // aggancia dal prossimo fix
+    toast("REC attivo");
+  }else{
+    toast("PAUSA");
   }
-
-  toast(state.recording ? "REC attivo" : "PAUSA");
 }
 
 /* =======================
-   Marker: Punti
+   Marker: punti e foto (diversi)
 ======================= */
 function createPointMarker(p){
   const marker=L.circleMarker([p.lat,p.lon],{
@@ -402,15 +396,12 @@ function createPointMarker(p){
 
   marker.on("click",()=>{
     selectPoint(p.id,{centerMap:false,scrollRow:true});
-    marker.bindPopup(`Punto ${p.id}`).openPopup();
+    marker.bindPopup(`${p.id}`).openPopup(); // solo numero
   });
 
   return marker;
 }
 
-/* =======================
-   Marker: Foto
-======================= */
 function photoIcon(){
   return L.divIcon({
     className:"",
@@ -440,7 +431,7 @@ function createPhotoMarker(photo){
 }
 
 /* =======================
-   Punti: logica + tabella
+   Punti + tabella
 ======================= */
 function addPoint(){
   if(!state.lastFix){
@@ -462,7 +453,7 @@ function addPoint(){
   state.points.unshift(p);
 
   const marker=createPointMarker(p);
-  state.markerByPointId.set(p.id,marker);
+  state.markerByPointId.set(p.id, marker);
 
   // reset parziale
   state.odoParzKm=0;
@@ -515,7 +506,7 @@ function selectPoint(id,{centerMap,scrollRow}){
   if(centerMap && p) map.setView([p.lat,p.lon],16);
   if(m){
     m.bringToFront();
-    m.bindPopup(`Punto ${id}`).openPopup();
+    m.bindPopup(`${id}`).openPopup(); // solo numero
   }
   if(scrollRow) scrollRowToActive();
 }
@@ -564,7 +555,7 @@ document.getElementById("cameraInput").addEventListener("change",(e)=>{
     state.photos.push(photo);
 
     const marker=createPhotoMarker(photo);
-    state.markerByPhotoId.set(photo.id,marker);
+    state.markerByPhotoId.set(photo.id, marker);
 
     toast(`Foto ${photo.id} salvata`);
   };
@@ -581,13 +572,12 @@ function exportCSV(){
     const a=Math.abs(v);
     const g=Math.floor(a);
     const m=((a-g)*60).toFixed(3);
-    const gg=isLat ? String(g) : String(g);
-    return `${d}${gg} ${m}`;
+    return `${d}${g} ${m}`;
   };
 
   let csv="ID;KM_TOT;KM_PARZ;LAT_DEC;LON_DEC;LAT_GM;LON_GM;ORA;ATT;PRERIL\n";
 
-  // Excel in ordine cronologico (1..n)
+  // ordine cronologico nel file (1..n)
   const ordered=[...state.points].reverse();
 
   ordered.forEach(p=>{
@@ -600,7 +590,7 @@ function exportCSV(){
 }
 
 /* =======================
-   Export GPX: traccia REC + waypoint punti + waypoint foto
+   Export GPX (traccia REC + waypoint punti + waypoint foto)
 ======================= */
 function exportGPX(){
   let gpx=`<?xml version="1.0" encoding="UTF-8"?>\n`;
@@ -612,13 +602,11 @@ function exportGPX(){
   });
   gpx+=`  </trkseg></trk>\n`;
 
-  // Punti
   state.points.slice().reverse().forEach(p=>{
     gpx+=`  <wpt lat="${p.lat}" lon="${p.lon}"><name>${p.id}</name></wpt>\n`;
   });
 
-  // Foto
-  state.photos.slice().forEach(ph=>{
+  state.photos.forEach(ph=>{
     gpx+=`  <wpt lat="${ph.lat}" lon="${ph.lon}"><name>Foto ${ph.id}</name></wpt>\n`;
   });
 
@@ -627,86 +615,24 @@ function exportGPX(){
 }
 
 /* =======================
-   Export KMZ: traccia REC + punti + foto con immagini
+   Export KMZ (traccia REC + punti + foto con immagini)
 ======================= */
 async function exportKMZ(){
   const zip = new JSZip();
   const filesFolder = "files/";
 
-  // === COSTRUZIONE COORDINATE TRACCIA REC ===
-  const trackCoords = state.trackRec
-    .map(p => `${p.lon},${p.lat},0`)
-    .join(" ");
-
-  let kml = `<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
-<Document>
-  <name>Roadbook</name>
-
-  <Style id="trackStyle">
-    <LineStyle>
-      <color>ffacd44d</color>
-      <width>4</width>
-    </LineStyle>
-  </Style>
-
-  <Placemark>
-    <name>Traccia REC</name>
-    <styleUrl>#trackStyle</styleUrl>
-    <LineString>
-      <tessellate>1</tessellate>
-      <coordinates>${trackCoords}</coordinates>
-    </LineString>
-  </Placemark>
-`;
-
-  // === PUNTI ===
-  state.points.forEach(p=>{
-    kml += `
-  <Placemark>
-    <name>Punto ${p.id}</name>
-    <Point>
-      <coordinates>${p.lon},${p.lat},0</coordinates>
-    </Point>
-  </Placemark>`;
-  });
-
-  // === FOTO ===
-  state.photos.forEach((ph,i)=>{
-    const imgName = `photo_${i+1}.jpg`;
-    zip.file(imgName, ph.dataUrl.split(",")[1], {base64:true});
-
-    kml += `
-  <Placemark>
-    <name>Foto ${i+1}</name>
-    <description><![CDATA[
-      ${ph.desc || ""}<br>
-      <img src="${imgName}" width="300">
-    ]]></description>
-    <Point>
-      <coordinates>${ph.lon},${ph.lat},0</coordinates>
-    </Point>
-  </Placemark>`;
-  });
-
-  kml += `
-</Document>
-</kml>`;
-
+  // KML completo
+  const kml = buildKML({zip, filesFolder});
   zip.file("doc.kml", kml);
 
-  const blob = await zip.generateAsync({type:"blob"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "roadbook.kmz";
-  a.click();
+  const blob = await zip.generateAsync({type:"blob", compression:"DEFLATE"});
+  downloadBlob("roadbook.kmz", blob);
 }
 
-
 function buildKML({zip, filesFolder}){
-  const trackCoords=state.trackRec.map(p=>`${p.lon},${p.lat},0`).join(" ");
+  const trackCoords = state.trackRec.map(p => `${p.lon},${p.lat},0`).join(" ");
 
-  const pointsKml=state.points.slice().reverse().map(p=>{
+  const pointsKml = state.points.slice().reverse().map(p=>{
     const descParts=[
       `KM Tot: ${round3(p.kmTot).toFixed(3)}`,
       `KM Parz: ${round3(p.kmParz).toFixed(3)}`,
@@ -729,17 +655,16 @@ function buildKML({zip, filesFolder}){
     </Placemark>`;
   }).join("\n");
 
-  const photosKml=state.photos.map(ph=>{
-    const mime=String(ph.dataUrl).split(";")[0].replace("data:","");
-    const ext=mime.includes("png") ? "png" : "jpg";
-    const imgName=`photo_${String(ph.id).padStart(3,"0")}.${ext}`;
-    const href=filesFolder + imgName;
+  const photosKml = state.photos.map(ph=>{
+    const mime = String(ph.dataUrl).split(";")[0].replace("data:","");
+    const ext = mime.includes("png") ? "png" : "jpg";
+    const imgName = `photo_${String(ph.id).padStart(3,"0")}.${ext}`;
+    const href = filesFolder + imgName;
 
-    const base64=ph.dataUrl.split(",")[1];
-    zip.file(href, base64, {base64:true});
+    zip.file(href, ph.dataUrl.split(",")[1], {base64:true});
 
-    const desc=escapeHtml(ph.desc || "");
-    const when=escapeHtml(ph.timeStr || "");
+    const desc = escapeHtml(ph.desc || "");
+    const when = escapeHtml(ph.timeStr || "");
 
     return `
     <Placemark>
@@ -784,8 +709,8 @@ function buildKML({zip, filesFolder}){
 }
 
 /* =======================
-   Long press 3s: reset Trip Totale + Traccia REC
-   (non cancella punti e foto)
+   Reset Trip Totale: tap lungo 3s (azzera trip + traccia REC)
+   Non cancella punti e foto
 ======================= */
 (function setupLongPressResetTot(){
   const card=document.getElementById("tripTotCard");
@@ -803,8 +728,8 @@ function buildKML({zip, filesFolder}){
       state.odoParzKm=0;
       updateTripsUI();
 
-      // reset solo traccia REC
       state.trackRec=[];
+      state.lastRecFix=null;
       trackLine.setLatLngs([]);
 
       if(navigator.vibrate) navigator.vibrate(80);
@@ -856,6 +781,7 @@ function downloadText(name,text,mime){
   const blob=new Blob([text],{type:mime||"application/octet-stream"});
   downloadBlob(name,blob);
 }
+
 function downloadBlob(name,blob){
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
@@ -863,6 +789,6 @@ function downloadBlob(name,blob){
   a.click();
 }
 </script>
+
 </body>
 </html>
-
