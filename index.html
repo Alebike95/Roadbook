@@ -19,32 +19,119 @@
   --ok:#4dd4ac;
   --warn:#ffcc66;
 }
+
 body{margin:0;background:var(--bg);color:#e8eef6;font-family:system-ui}
 .card{background:var(--card);border-radius:14px;padding:10px;margin:8px}
-.big{font-size:56px;font-family:monospace;line-height:1;text-align:right;padding-right:2ch}
+
+.top-row{
+  display:flex;
+  gap:8px;
+  align-items:stretch;
+}
+
+.trip-card{
+  flex:1;
+}
+
+.photo-btn{
+  width:56px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:26px;
+  cursor:pointer;
+  background:var(--btn);
+  border-radius:14px;
+}
+
+.big{
+  font-size:56px;
+  font-family:monospace;
+  line-height:1;
+  text-align:right;
+  padding-right:2ch;
+}
+
 .label{font-size:11px;color:var(--muted)}
 .small{font-size:12px;color:var(--muted)}
-button{background:var(--btn);color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:12px}
-.gps-bar{display:flex;align-items:center;gap:8px}
-.gps-info{flex:1;display:flex;gap:10px;justify-content:center;white-space:nowrap}
+
+button{
+  background:var(--btn);
+  color:#fff;
+  border:none;
+  border-radius:8px;
+  padding:6px 10px;
+  font-size:12px;
+}
+
+.gps-bar{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+.gps-info{
+  flex:1;
+  display:flex;
+  gap:10px;
+  justify-content:center;
+  white-space:nowrap;
+}
+
 #recBtn.rec{color:var(--ok)}
 #recBtn.pause{color:var(--warn)}
-#map{height:320px;border-radius:14px;position:relative}
-#recenter{position:absolute;bottom:12px;right:12px;z-index:2000;background:var(--btn);border-radius:50%;width:46px;height:46px;display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer}
+
+#map{
+  height:320px;
+  border-radius:14px;
+  position:relative;
+}
+
+#recenter{
+  position:absolute;
+  bottom:12px;
+  right:12px;
+  z-index:2000;
+  background:var(--btn);
+  border-radius:50%;
+  width:46px;
+  height:46px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:22px;
+  cursor:pointer;
+}
+
 table{width:100%;border-collapse:collapse;font-size:13px}
 td,th{border-bottom:1px solid var(--line);padding:6px}
-input{width:64px;background:var(--btn);color:#fff;border:1px solid #333;border-radius:6px;padding:4px}
-.input-att{width:44px}
+
+input,textarea{
+  background:var(--btn);
+  color:#fff;
+  border:1px solid #333;
+  border-radius:6px;
+  padding:4px;
+}
+
+textarea{width:100%;resize:vertical}
+
 </style>
 </head>
 
 <body>
 
-<div class="card" id="tripTotCard">
-  <div class="label">TRIP TOTALE (tap lungo 3s = azzera)</div>
-  <div class="big" id="odoTot">0.000</div>
+<!-- TOP -->
+<div class="top-row">
+  <div class="card trip-card" id="tripTotCard">
+    <div class="label">TRIP TOTALE</div>
+    <div class="big" id="odoTot">0.000</div>
+  </div>
+
+  <div class="photo-btn" onclick="takePhoto()">📷</div>
 </div>
 
+<!-- GPS -->
 <div class="card gps-bar small">
   <button onclick="startGPS()">📡</button>
   <div class="gps-info">
@@ -56,38 +143,37 @@ input{width:64px;background:var(--btn);color:#fff;border:1px solid #333;border-r
   <button id="recBtn" class="pause" onclick="toggleRec()">PAUSA</button>
 </div>
 
+<!-- MAP -->
 <div class="card">
   <div id="map">
     <div id="recenter" onclick="recenter()">🎯</div>
   </div>
 </div>
 
+<!-- TRIP PARZIALE -->
 <div class="card" onclick="addPoint()">
   <div class="label">TRIP PARZIALE (tap = punto)</div>
   <div class="big" id="odoParz">0.000</div>
 </div>
 
+<!-- EXPORT -->
 <div class="card">
-<table>
-<thead>
-<tr>
-<th>#</th><th>KM Tot</th><th>KM Parz</th><th>Ora</th><th>Att</th><th>PreRil</th>
-</tr>
-</thead>
-<tbody id="points"></tbody>
-</table>
+  <button onclick="exportKMZ()">Export KMZ</button>
 </div>
 
-<div class="card">
-<button onclick="exportCSV()">Export Excel</button>
-<button onclick="exportGPX()">Export GPX</button>
-<button onclick="exportKMZ()">Export KMZ</button>
-</div>
+<input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none">
 
 <script>
 const state={
-  watch:null,recording:false,last:null,lastFixTime:null,
-  odoTot:0,odoParz:0,track:[],points:[],nextId:1
+  watch:null,
+  recording:false,
+  last:null,
+  lastFixTime:null,
+  odoTot:0,
+  odoParz:0,
+  track:[],
+  points:[],
+  photos:[]
 };
 
 const map=L.map("map").setView([45,9],13);
@@ -98,7 +184,8 @@ function recenter(){ if(state.last) map.setView([state.last.lat,state.last.lon],
 
 function startGPS(){
   if(state.watch) navigator.geolocation.clearWatch(state.watch);
-  state.recording=false; updateRecUI();
+  state.recording=false;
+  updateRecUI();
   state.watch=navigator.geolocation.watchPosition(pos=>{
     const {latitude:lat,longitude:lon,accuracy}=pos.coords;
     const now=Date.now();
@@ -111,20 +198,27 @@ function startGPS(){
     state.lastFixTime=now;
     if(state.last && state.recording){
       const d=haversine(state.last.lat,state.last.lon,lat,lon);
-      state.odoTot+=d; state.odoParz+=d;
-      updateTrips(); line.addLatLng([lat,lon]);
+      state.odoTot+=d;
+      state.odoParz+=d;
+      updateTrips();
+      line.addLatLng([lat,lon]);
     }
     state.last={lat,lon,time:new Date()};
     state.track.push(state.last);
   },()=>{}, {enableHighAccuracy:true});
 }
 
-function toggleRec(){ state.recording=!state.recording; updateRecUI(); }
+function toggleRec(){
+  state.recording=!state.recording;
+  updateRecUI();
+}
+
 function updateRecUI(){
   const b=document.getElementById("recBtn");
   b.textContent=state.recording?"REC":"PAUSA";
   b.className=state.recording?"rec":"pause";
 }
+
 function updateTrips(){
   document.getElementById("odoTot").textContent=state.odoTot.toFixed(3);
   document.getElementById("odoParz").textContent=state.odoParz.toFixed(3);
@@ -132,53 +226,79 @@ function updateTrips(){
 
 function addPoint(){
   if(!state.last) return;
-  state.points.unshift({
-    id:state.nextId++, kmTot:state.odoTot, kmParz:state.odoParz,
-    lat:state.last.lat, lon:state.last.lon,
-    time:state.last.time.toLocaleTimeString(), att:"", preril:""
-  });
-  state.odoParz=0; updateTrips(); renderTable();
+  state.odoParz=0;
+  updateTrips();
 }
 
-function renderTable(){
-  const tb=document.getElementById("points"); tb.innerHTML="";
-  state.points.forEach((p,i)=>{
-    tb.innerHTML+=`
-    <tr>
-      <td>${p.id}</td>
-      <td>${p.kmTot.toFixed(3)}</td>
-      <td>${p.kmParz.toFixed(3)}</td>
-      <td>${p.time}</td>
-      <td><input class="input-att" value="${p.att}" onchange="state.points[${i}].att=this.value"></td>
-      <td><input value="${p.preril}" onchange="state.points[${i}].preril=this.value"></td>
-    </tr>`;
-  });
+function takePhoto(){
+  if(!state.last){
+    alert("GPS non disponibile");
+    return;
+  }
+  document.getElementById("cameraInput").click();
 }
 
-function exportCSV(){
-  const toDec=v=>v.toFixed(6).replace(".",",");
-  const toGM=(v,isLat)=>{
-    const d=isLat?(v>=0?"N":"S"):(v>=0?"E":"W");
-    const a=Math.abs(v), g=Math.floor(a), m=((a-g)*60).toFixed(3);
-    return `${d}${g} ${m}`;
+document.getElementById("cameraInput").addEventListener("change",e=>{
+  const file=e.target.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    const photo={
+      lat:state.last.lat,
+      lon:state.last.lon,
+      img:reader.result,
+      desc:""
+    };
+    state.photos.push(photo);
+
+    const marker=L.marker([photo.lat,photo.lon]).addTo(map);
+    marker.bindPopup(()=>{
+      const div=document.createElement("div");
+      div.innerHTML=`
+        <img src="${photo.img}" style="width:200px"><br>
+        <textarea placeholder="Descrizione foto">${photo.desc}</textarea>
+      `;
+      const ta=div.querySelector("textarea");
+      ta.onchange=()=>photo.desc=ta.value;
+      return div;
+    });
   };
+  reader.readAsDataURL(file);
+});
 
-  let csv="ID;KM_TOT;KM_PARZ;LAT_DEC;LON_DEC;LAT_GM;LON_GM;ORA;ATT;PRERIL\n";
+function exportKMZ(){
+  const zip=new JSZip();
+  let kml=`<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+<name>Roadbook</name>`;
 
-  const ordered=[...state.points].reverse(); // <-- FIX DEFINITIVO
-
-  ordered.forEach(p=>{
-    csv+=`${p.id};${p.kmTot.toFixed(3).replace(".",",")};${p.kmParz.toFixed(3).replace(".",",")};${toDec(p.lat)};${toDec(p.lon)};${toGM(p.lat,true)};${toGM(p.lon,false)};${p.time};${p.att};${p.preril}\n`;
+  state.photos.forEach((p,i)=>{
+    const imgName=`photo${i}.jpg`;
+    const base64=p.img.split(",")[1];
+    zip.file(imgName,base64,{base64:true});
+    kml+=`
+<Placemark>
+<name>Foto ${i+1}</name>
+<description><![CDATA[${p.desc}<br><img src="${imgName}" width="300">]]></description>
+<Point><coordinates>${p.lon},${p.lat},0</coordinates></Point>
+</Placemark>`;
   });
 
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(new Blob([csv]));
-  a.download="roadbook_export.csv";
-  a.click();
+  kml+=`</Document></kml>`;
+  zip.file("doc.kml",kml);
+
+  zip.generateAsync({type:"blob"}).then(blob=>{
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="roadbook.kmz";
+    a.click();
+  });
 }
 
 function haversine(a,b,c,d){
-  const R=6371, r=x=>x*Math.PI/180;
+  const R=6371;
+  const r=x=>x*Math.PI/180;
   const x=Math.sin(r(c-a)/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2;
   return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 }
