@@ -630,15 +630,78 @@ function exportGPX(){
    Export KMZ: traccia REC + punti + foto con immagini
 ======================= */
 async function exportKMZ(){
-  const zip=new JSZip();
-  const filesFolder="files/";
+  const zip = new JSZip();
+  const filesFolder = "files/";
 
-  const kml=buildKML({zip, filesFolder});
-  zip.file("doc.kml",kml);
+  // === COSTRUZIONE COORDINATE TRACCIA REC ===
+  const trackCoords = state.trackRec
+    .map(p => `${p.lon},${p.lat},0`)
+    .join(" ");
 
-  const blob=await zip.generateAsync({type:"blob",compression:"DEFLATE"});
-  downloadBlob("roadbook.kmz",blob);
+  let kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+  <name>Roadbook</name>
+
+  <Style id="trackStyle">
+    <LineStyle>
+      <color>ffacd44d</color>
+      <width>4</width>
+    </LineStyle>
+  </Style>
+
+  <Placemark>
+    <name>Traccia REC</name>
+    <styleUrl>#trackStyle</styleUrl>
+    <LineString>
+      <tessellate>1</tessellate>
+      <coordinates>${trackCoords}</coordinates>
+    </LineString>
+  </Placemark>
+`;
+
+  // === PUNTI ===
+  state.points.forEach(p=>{
+    kml += `
+  <Placemark>
+    <name>Punto ${p.id}</name>
+    <Point>
+      <coordinates>${p.lon},${p.lat},0</coordinates>
+    </Point>
+  </Placemark>`;
+  });
+
+  // === FOTO ===
+  state.photos.forEach((ph,i)=>{
+    const imgName = `photo_${i+1}.jpg`;
+    zip.file(imgName, ph.dataUrl.split(",")[1], {base64:true});
+
+    kml += `
+  <Placemark>
+    <name>Foto ${i+1}</name>
+    <description><![CDATA[
+      ${ph.desc || ""}<br>
+      <img src="${imgName}" width="300">
+    ]]></description>
+    <Point>
+      <coordinates>${ph.lon},${ph.lat},0</coordinates>
+    </Point>
+  </Placemark>`;
+  });
+
+  kml += `
+</Document>
+</kml>`;
+
+  zip.file("doc.kml", kml);
+
+  const blob = await zip.generateAsync({type:"blob"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "roadbook.kmz";
+  a.click();
 }
+
 
 function buildKML({zip, filesFolder}){
   const trackCoords=state.trackRec.map(p=>`${p.lon},${p.lat},0`).join(" ");
@@ -802,3 +865,4 @@ function downloadBlob(name,blob){
 </script>
 </body>
 </html>
+
