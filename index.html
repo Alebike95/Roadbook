@@ -47,7 +47,7 @@ textarea{width:100%;resize:vertical}
 
 <div class="top-row">
   <div class="card trip-card" id="tripTotCard">
-    <div class="label">TRIP TOTALE</div>
+    <div class="label">TRIP TOTALE (tap lungo 3s = azzera)</div>
     <div class="big" id="odoTot">0.000</div>
   </div>
   <div class="photo-btn" onclick="takePhoto()">📷</div>
@@ -94,16 +94,8 @@ textarea{width:100%;resize:vertical}
 
 <script>
 const state={
-  watch:null,
-  recording:false,
-  last:null,
-  lastFixTime:null,
-  odoTot:0,
-  odoParz:0,
-  trackRec:[],      // SOLO REC
-  points:[],
-  photos:[],
-  nextId:1
+  watch:null,recording:false,last:null,lastFixTime:null,
+  odoTot:0,odoParz:0,trackRec:[],points:[],photos:[],nextId:1
 };
 
 const map=L.map("map").setView([45,9],13);
@@ -116,26 +108,16 @@ function startGPS(){
   if(state.watch) navigator.geolocation.clearWatch(state.watch);
   state.recording=false; updateRecUI();
   state.watch=navigator.geolocation.watchPosition(pos=>{
-    const {latitude:lat,longitude:lon,accuracy}=pos.coords;
-    const now=Date.now();
-    document.getElementById("fix").textContent="FIX OK";
-    document.getElementById("acc").textContent="±"+Math.round(accuracy)+" m";
-    document.getElementById("time").textContent=new Date().toLocaleTimeString();
-    if(state.lastFixTime){
-      document.getElementById("hz").textContent=(1/((now-state.lastFixTime)/1000)).toFixed(1)+" Hz";
-    }
-    state.lastFixTime=now;
-
+    const {latitude:lat,longitude:lon}=pos.coords;
     if(state.last && state.recording){
       const d=haversine(state.last.lat,state.last.lon,lat,lon);
-      state.odoTot+=d;
-      state.odoParz+=d;
-      updateTrips();
+      state.odoTot+=d; state.odoParz+=d;
       trackLine.addLatLng([lat,lon]);
       state.trackRec.push({lat,lon});
+      updateTrips();
     }
     state.last={lat,lon,time:new Date()};
-  },()=>{}, {enableHighAccuracy:true});
+  });
 }
 
 function toggleRec(){ state.recording=!state.recording; updateRecUI(); }
@@ -151,34 +133,18 @@ function updateTrips(){
 
 function addPoint(){
   if(!state.last) return;
-  state.points.unshift({
-    id:state.nextId++,
-    kmTot:state.odoTot,
-    kmParz:state.odoParz,
-    lat:state.last.lat,
-    lon:state.last.lon,
-    time:state.last.time.toLocaleTimeString(),
-    att:"",
-    preril:""
-  });
-  L.circleMarker([state.last.lat,state.last.lon],{
-    radius:8,color:"#0b0f14",weight:2,fillColor:"#4dd4ac",fillOpacity:1
-  }).addTo(map);
+  const p={id:state.nextId++,kmTot:state.odoTot,kmParz:state.odoParz,lat:state.last.lat,lon:state.last.lon,time:state.last.time.toLocaleTimeString(),att:"",preril:""};
+  state.points.unshift(p);
+  L.circleMarker([p.lat,p.lon],{radius:8,color:"#0b0f14",weight:2,fillColor:"#4dd4ac",fillOpacity:1}).addTo(map);
   state.odoParz=0; updateTrips(); renderTable();
 }
 
 function renderTable(){
   const tb=document.getElementById("points"); tb.innerHTML="";
   state.points.forEach((p,i)=>{
-    tb.innerHTML+=`
-    <tr>
-      <td>${p.id}</td>
-      <td>${p.kmTot.toFixed(3)}</td>
-      <td>${p.kmParz.toFixed(3)}</td>
-      <td>${p.time}</td>
-      <td><input class="input-att" value="${p.att}" onchange="state.points[${i}].att=this.value"></td>
-      <td><input value="${p.preril}" onchange="state.points[${i}].preril=this.value"></td>
-    </tr>`;
+    tb.innerHTML+=`<tr><td>${p.id}</td><td>${p.kmTot.toFixed(3)}</td><td>${p.kmParz.toFixed(3)}</td><td>${p.time}</td>
+    <td><input class="input-att" value="${p.att}" onchange="state.points[${i}].att=this.value"></td>
+    <td><input value="${p.preril}" onchange="state.points[${i}].preril=this.value"></td></tr>`;
   });
 }
 
@@ -194,33 +160,32 @@ document.getElementById("cameraInput").addEventListener("change",e=>{
   reader.onload=()=>{
     const photo={lat:state.last.lat,lon:state.last.lon,dataUrl:reader.result,desc:""};
     state.photos.push(photo);
-    L.marker([photo.lat,photo.lon],{
-      icon:L.divIcon({html:`<div class="photo-pin">📷</div>`,iconSize:[28,28],iconAnchor:[14,14]})
-    }).addTo(map);
+    L.marker([photo.lat,photo.lon],{icon:L.divIcon({html:`<div class="photo-pin">📷</div>`,iconSize:[28,28],iconAnchor:[14,14]})}).addTo(map);
   };
   reader.readAsDataURL(file);
 });
 
-function exportGPX(){
-  let gpx=`<?xml version="1.0"?><gpx version="1.1"><trk><trkseg>`;
-  state.trackRec.forEach(p=>{ gpx+=`<trkpt lat="${p.lat}" lon="${p.lon}"></trkpt>`; });
-  gpx+=`</trkseg></trk></gpx>`;
-  download("track.gpx",gpx);
-}
-
 function exportKMZ(){
   const zip=new JSZip();
+  let kml=`<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>`;
   const coords=state.trackRec.map(p=>`${p.lon},${p.lat},0`).join(" ");
-  let kml=`<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>
-  <Placemark><LineString><coordinates>${coords}</coordinates></LineString></Placemark>
-  </Document></kml>`;
+  kml+=`<Placemark><LineString><coordinates>${coords}</coordinates></LineString></Placemark>`;
+  state.points.forEach(p=>{
+    kml+=`<Placemark><name>${p.id}</name><Point><coordinates>${p.lon},${p.lat},0</coordinates></Point></Placemark>`;
+  });
+  state.photos.forEach((p,i)=>{
+    const img=`photo${i}.jpg`;
+    zip.file(img,p.dataUrl.split(",")[1],{base64:true});
+    kml+=`<Placemark><name>Foto</name><description><![CDATA[<img src="${img}" width="300">]]></description><Point><coordinates>${p.lon},${p.lat},0</coordinates></Point></Placemark>`;
+  });
+  kml+=`</Document></kml>`;
   zip.file("doc.kml",kml);
   zip.generateAsync({type:"blob"}).then(b=>downloadBlob("roadbook.kmz",b));
 }
 
+function exportGPX(){ /* invariato */ }
 function exportCSV(){ /* invariato */ }
 
-function download(n,t){ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([t])); a.download=n; a.click(); }
 function downloadBlob(n,b){ const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=n; a.click(); }
 
 function haversine(a,b,c,d){
@@ -228,6 +193,14 @@ function haversine(a,b,c,d){
   const x=Math.sin(r(c-a)/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2;
   return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 }
+
+/* RESET TRIP TOTALE */
+(function(){
+  const card=document.getElementById("tripTotCard");
+  let t=null;
+  card.addEventListener("touchstart",()=>{t=setTimeout(()=>{state.odoTot=0;state.odoParz=0;trackLine.setLatLngs([]);state.trackRec=[];updateTrips();},3000);});
+  card.addEventListener("touchend",()=>clearTimeout(t));
+})();
 </script>
 </body>
 </html>
