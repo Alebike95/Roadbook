@@ -496,6 +496,45 @@ function downloadBlob(name, blob) {
   a.download = name;
   a.click();
 }
+  /* =======================
+   Foto
+======================= */
+function takePhoto() {
+  if (!state.lastFix) {
+    toast("Nessun fix GPS per foto");
+    return;
+  }
+  const inp = document.getElementById("cameraInput");
+  inp.value = "";
+  inp.click();
+}
+
+document.getElementById("cameraInput").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const photo = {
+      id: state.nextPhotoId++,
+      lat: state.lastFix.lat,
+      lon: state.lastFix.lon,
+      timeStr: new Date().toLocaleTimeString(),
+      dataUrl: reader.result,
+      desc: ""
+    };
+
+    state.photos.push(photo);
+
+    const marker = createPhotoMarker(photo);
+    state.markerByPhotoId.set(photo.id, marker);
+
+    toast(`Foto ${photo.id} salvata`);
+  };
+  reader.readAsDataURL(file);
+});
+
 </script>
 </body>
 </html>
+
