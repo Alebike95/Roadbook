@@ -12,8 +12,10 @@
 body{margin:0;background:#0b0f14;color:#e8eef6;font-family:system-ui}
 .card{background:#121826;border-radius:14px;padding:10px;margin:8px}
 .row{display:flex;gap:8px}
-.big{font-size:38px;font-family:monospace}
+.big{font-size:52px;font-family:monospace;line-height:1}
+.label{font-size:11px;color:#9fb0c3}
 .small{font-size:12px;color:#9fb0c3}
+button{background:#1b2536;color:#fff;border:none;border-radius:10px;padding:10px}
 #map{height:320px;border-radius:14px;position:relative}
 #recenter{
   position:absolute;bottom:12px;right:12px;
@@ -26,6 +28,8 @@ table{width:100%;border-collapse:collapse;font-size:13px}
 td,th{border-bottom:1px solid #223;padding:6px}
 input{width:60px;background:#1b2536;color:#fff;border:1px solid #333;border-radius:6px;padding:4px}
 .hidden{display:none}
+.rec{color:#4dd4ac}
+.pause{color:#ffcc66}
 </style>
 </head>
 
@@ -34,12 +38,12 @@ input{width:60px;background:#1b2536;color:#fff;border:1px solid #333;border-radi
 <!-- TRIP -->
 <div class="row">
   <div class="card" style="flex:1">
-    <div class="small">TRIP TOTALE</div>
+    <div class="label">TRIP TOTALE</div>
     <div class="big" id="odoTot">0.000</div>
   </div>
 
   <div class="card" style="flex:1;cursor:pointer" onclick="addPoint()">
-    <div class="small">TRIP PARZIALE (tap = punto)</div>
+    <div class="label">TRIP PARZIALE (tap = punto)</div>
     <div class="big" id="odoParz">0.000</div>
   </div>
 </div>
@@ -49,7 +53,13 @@ input{width:60px;background:#1b2536;color:#fff;border:1px solid #333;border-radi
   <span id="fix">FIX —</span> |
   <span id="acc">±— m</span> |
   <span id="time">—</span> |
-  <span id="rec">PAUSA</span>
+  <span id="hz">— Hz</span> |
+  <button id="recBtn" onclick="toggleRec()">REC</button>
+</div>
+
+<!-- CONTROLS -->
+<div class="card">
+  <button onclick="startGPS()">📡 Avvia GPS</button>
 </div>
 
 <!-- MAP -->
@@ -84,10 +94,11 @@ input{width:60px;background:#1b2536;color:#fff;border:1px solid #333;border-radi
 </div>
 
 <script>
-/* ===== STATO ===== */
 const state={
+  watch:null,
+  recording:false,
   last:null,
-  recording:true,
+  lastFixTime:null,
   odoTot:0,
   odoParz:0,
   track:[],
@@ -95,48 +106,65 @@ const state={
   timeline:[]
 };
 
-/* ===== MAPPA ===== */
 const map=L.map("map").setView([45,9],13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
 const line=L.polyline([],{color:"#4dd4ac"}).addTo(map);
 
-/* ===== GPS ===== */
-navigator.geolocation.watchPosition(pos=>{
-  const {latitude:lat,longitude:lon,accuracy}=pos.coords;
-  const t=new Date();
+function startGPS(){
+  if(state.watch) navigator.geolocation.clearWatch(state.watch);
+  state.recording=true;
+  updateRecUI();
 
-  document.getElementById("fix").textContent="FIX OK";
-  document.getElementById("acc").textContent="±"+Math.round(accuracy)+" m";
-  document.getElementById("time").textContent=t.toLocaleTimeString();
-  document.getElementById("rec").textContent=state.recording?"REC":"PAUSA";
+  state.watch=navigator.geolocation.watchPosition(
+    pos=>{
+      const {latitude:lat,longitude:lon,accuracy}=pos.coords;
+      const now=Date.now();
 
-  if(state.last && state.recording){
-    const d=haversine(state.last.lat,state.last.lon,lat,lon);
-    state.odoTot+=d;
-    state.odoParz+=d;
-    document.getElementById("odoTot").textContent=state.odoTot.toFixed(3);
-    document.getElementById("odoParz").textContent=state.odoParz.toFixed(3);
-    line.addLatLng([lat,lon]);
-  }
+      document.getElementById("fix").textContent="FIX OK";
+      document.getElementById("acc").textContent="±"+Math.round(accuracy)+" m";
+      document.getElementById("time").textContent=new Date().toLocaleTimeString();
 
-  state.last={lat,lon,time:t};
-  state.track.push(state.last);
+      if(state.lastFixTime){
+        const dt=(now-state.lastFixTime)/1000;
+        document.getElementById("hz").textContent=(1/dt).toFixed(1)+" Hz";
+      }
+      state.lastFixTime=now;
 
-},{enableHighAccuracy:true});
+      if(state.last && state.recording){
+        const d=haversine(state.last.lat,state.last.lon,lat,lon);
+        state.odoTot+=d;
+        state.odoParz+=d;
+        document.getElementById("odoTot").textContent=state.odoTot.toFixed(3);
+        document.getElementById("odoParz").textContent=state.odoParz.toFixed(3);
+        line.addLatLng([lat,lon]);
+      }
 
-/* ===== DISTANZA ===== */
-function haversine(a,b,c,d){
-  const R=6371;
-  const r=x=>x*Math.PI/180;
-  const x=Math.sin(r(c-a)/2)**2+
-          Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2;
-  return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+      state.last={lat,lon,time:new Date()};
+      state.track.push(state.last);
+    },
+    ()=>{ document.getElementById("fix").textContent="ERRORE GPS"; },
+    {enableHighAccuracy:true,maximumAge:0}
+  );
 }
 
-/* ===== PUNTO ===== */
-function addPoint(){
-  if(!state.last)return;
+function toggleRec(){
+  state.recording=!state.recording;
+  updateRecUI();
+}
 
+function updateRecUI(){
+  const b=document.getElementById("recBtn");
+  if(state.recording){
+    b.textContent="REC";
+    b.className="rec";
+  }else{
+    b.textContent="PAUSA";
+    b.className="pause";
+  }
+}
+
+function addPoint(){
+  if(!state.last) return;
   const p={
     id:state.points.length+1,
     kmTot:state.odoTot,
@@ -146,18 +174,13 @@ function addPoint(){
     time:state.last.time.toLocaleTimeString(),
     preril:""
   };
-
   state.points.unshift(p);
   state.timeline.unshift("P"+p.id+" @ "+p.kmTot.toFixed(3));
-
   state.odoParz=0;
   document.getElementById("odoParz").textContent="0.000";
-
-  renderPoints();
-  renderTimeline();
+  renderPoints();renderTimeline();
 }
 
-/* ===== RENDER ===== */
 function renderPoints(){
   const tb=document.getElementById("points");
   tb.innerHTML="";
@@ -170,31 +193,24 @@ function renderPoints(){
       <td>${p.lat.toFixed(6)}</td>
       <td>${p.lon.toFixed(6)}</td>
       <td>${p.time}</td>
-      <td><input value="${p.preril}" onchange="updatePreRil(${i},this.value)"></td>
+      <td><input value="${p.preril}" onchange="state.points[${i}].preril=this.value"></td>
     </tr>`;
   });
-}
-
-function updatePreRil(i,val){
-  state.points[i].preril=val;
 }
 
 function toggleTimeline(){
   document.getElementById("timeline").classList.toggle("hidden");
 }
-
 function renderTimeline(){
   const ul=document.getElementById("timeline");
   ul.innerHTML="";
   state.timeline.forEach(e=>ul.innerHTML+="<li>"+e+"</li>");
 }
 
-/* ===== MAPPA ===== */
 function recenter(){
   if(state.last) map.setView([state.last.lat,state.last.lon],16);
 }
 
-/* ===== EXPORT ===== */
 function exportCSV(){
   let csv="ID;KM_TOT;KM_PARZ;LAT;LON;ORA;PRERIL\n";
   state.points.forEach(p=>{
@@ -217,8 +233,14 @@ function download(n,t){
   a.href=URL.createObjectURL(new Blob([t]));
   a.download=n;a.click();
 }
+
+function haversine(a,b,c,d){
+  const R=6371;
+  const r=x=>x*Math.PI/180;
+  const x=Math.sin(r(c-a)/2)**2+
+          Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2;
+  return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
 </script>
 </body>
 </html>
-
-
